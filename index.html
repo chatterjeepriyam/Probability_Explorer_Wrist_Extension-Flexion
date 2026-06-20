@@ -114,6 +114,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16
         <div class="bg" id="thr-toggle">
           <button class="on" data-mode="fixed">0.5 Fixed</button>
           <button data-mode="youden">Youden J</button>
+          <button data-mode="spec100">100% Specificity</button>
         </div>
       </div>
       <div class="thr-readout">P(IM) ≥ <b id="thr-val">0.500</b></div>
@@ -271,6 +272,12 @@ function youdenThr(data){
   });
   return thr;
 }
+function spec100Thr(data){
+  // Smallest threshold that still yields zero false positives: just above
+  // the single highest Genuine-trial probability in this cohort.
+  var maxG = Math.max.apply(null, data.map(function(d){return d.pG;}));
+  return maxG + 1e-9;
+}
 
 /* ════════════════════════════════════════════════════════════
    TOGGLES
@@ -298,7 +305,7 @@ document.getElementById('fn-toggle').addEventListener('click', function(){
   renderAll();
 });
 window.addEventListener('resize', function(){
-  Plotly.Plots.resize('chart');
+  renderAll();
 });
 
 /* ════════════════════════════════════════════════════════════
@@ -306,7 +313,7 @@ window.addEventListener('resize', function(){
 ═══════════════════════════════════════════════════════════ */
 function renderAll(){
   var data = COHORTS[activeCohort];
-  var thr = thrMode==='fixed' ? 0.5 : youdenThr(data);
+  var thr = thrMode==='fixed' ? 0.5 : thrMode==='youden' ? youdenThr(data) : spec100Thr(data);
   document.getElementById('thr-val').textContent = thr.toFixed(4);
 
   var m = metricsAt(data, thr);
@@ -359,7 +366,20 @@ function renderAll(){
       text:fnId, hovertemplate:'%{text}<br>False Negative<extra></extra>'});
   }
 
+  // Measure the chart container fresh on every render and pass explicit
+  // pixel dimensions to Plotly. Letting Plotly auto-detect size from the
+  // container on every Plotly.react() call (autosize:true with no
+  // explicit width/height) is what produced the scaling bug: after a
+  // toggle click, Plotly sometimes re-used a stale internal size estimate
+  // instead of re-measuring the flexbox-driven container, so the plot
+  // rendered at the wrong scale and the bottom of the chart ran off
+  // screen. Reading clientWidth/clientHeight here guarantees the plot is
+  // always sized to match the container exactly as it exists right now.
+  var chartEl = document.getElementById('chart');
+  var chartW = chartEl.clientWidth, chartH = chartEl.clientHeight;
+
   Plotly.react('chart', traces, {
+    width: chartW, height: chartH, autosize: false,
     paper_bgcolor:'transparent', plot_bgcolor:'transparent',
     font:{color:'#10182b', family:'IBM Plex Sans', size:15},
     xaxis:{tickmode:'array', tickvals:[0,1], ticktext:['Genuine trials','IM trials'],
@@ -381,8 +401,7 @@ function renderAll(){
     ],
     margin:{t:40, r:24, b:54, l:68},
     legend:{font:{size:15}, orientation:'h', x:0.5, y:1.1, xanchor:'center'},
-    hoverlabel:{font:{size:14}},
-    autosize:true
+    hoverlabel:{font:{size:14}}
   }, {responsive:true, displayModeBar:false});
 
   /* ── Confusion matrix ─────────────────────────────────────── */
