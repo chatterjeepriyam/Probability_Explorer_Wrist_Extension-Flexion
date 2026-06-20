@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genuine vs IM — Participant Probability Map</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+<style>
+:root{
+  --bg:#ffffff;--bg2:#f6f8fb;--bg3:#eef2f7;
+  --border:#e1e6ee;--border2:#cfd6e3;
+  --accent:#0077b6;--green:#188a4e;--orange:#d9480f;--yellow:#e8a900;--red:#d92d20;
+  --text:#10182b;--muted:#64748b;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;overflow:auto}
+
+.app{min-height:100vh;display:flex;flex-direction:column}
+
+/* ── Top bar ───────────────────────────────────────────────── */
+.topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:16px;padding:18px 26px;border-bottom:1px solid var(--border);background:var(--bg)}
+.title{font-size:20px;font-weight:700;letter-spacing:.01em;color:var(--text)}
+.title span{color:var(--muted);font-weight:400;font-size:15px;margin-left:8px}
+
+.ctrls{display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+.cg{display:flex;align-items:center;gap:11px}
+.cl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.bg{display:flex;gap:3px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:3px}
+.bg button{padding:8px 17px;border:none;border-radius:7px;background:transparent;color:var(--muted);
+  font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;transition:all .14s}
+.bg button.on{background:var(--accent);color:#fff;box-shadow:0 1px 2px rgba(0,119,182,.3)}
+.bg button:hover:not(.on){color:var(--text)}
+.thr-readout{font-family:var(--mono);font-size:16px;color:var(--text);background:var(--bg3);
+  border:1px solid var(--border);border-radius:9px;padding:9px 16px}
+.thr-readout b{color:var(--accent)}
+
+/* ── Main layout ───────────────────────────────────────────── */
+.main{flex:1;display:flex;gap:18px;padding:18px 26px 26px;min-height:0}
+.chart-card{flex:1 1 70%;background:var(--bg);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 1px 3px rgba(16,24,43,.05),0 6px 18px rgba(16,24,43,.04);
+  padding:16px 18px;display:flex;flex-direction:column;min-width:0;min-height:500px}
+#chart{flex:1;min-height:0}
+
+.side{flex:0 0 360px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;min-height:0}
+
+.panel{background:var(--bg);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 1px 3px rgba(16,24,43,.05),0 6px 18px rgba(16,24,43,.04);padding:18px 20px}
+.panel-t{font-size:13.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:14px}
+
+/* ── Confusion matrix ──────────────────────────────────────── */
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px}
+.cm-cell{padding:17px 10px;text-align:center;font-family:var(--mono);font-size:29px;font-weight:700;border-radius:9px}
+.cm-lbl{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);display:flex;align-items:center;justify-content:center;line-height:1.3}
+.tp,.tn{background:rgba(24,138,78,.10);color:var(--green)}
+.fp,.fn{background:rgba(217,45,32,.09);color:var(--red)}
+
+/* ── Metrics ───────────────────────────────────────────────── */
+.met-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.met{background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px 16px}
+.met-l{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.met-v{font-size:26px;font-weight:700;font-family:var(--mono);line-height:1.2;margin-top:3px;color:var(--text)}
+.met.full{grid-column:1/-1}
+
+/* ── Flag chips ────────────────────────────────────────────── */
+.flag-sec{margin-top:4px}
+.flag-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;
+  width:100%;background:transparent;border:1px solid transparent;border-radius:9px;
+  padding:7px 9px;margin-left:-9px;cursor:pointer;transition:all .14s;
+  font-family:inherit;font-size:inherit;color:inherit}
+.flag-hd:hover{background:var(--bg2);border-color:var(--border)}
+.flag-hd.on{background:rgba(232,169,0,.10);border-color:rgba(232,169,0,.35)}
+.flag-hd.on .fl{color:var(--yellow)}
+.flag-hd .fl{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--orange)}
+.flag-hd .fl::before{content:'';width:9px;height:9px;border-radius:50%;border:1.8px solid currentColor;
+  background:transparent;transition:all .14s;flex-shrink:0}
+.flag-hd.on .fl::before{background:var(--yellow);box-shadow:0 0 0 3px rgba(232,169,0,.18)}
+.flag-hd .fn-lbl{color:var(--red)}
+.flag-hd.on .fn-lbl{color:var(--red)}
+.flag-n{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:88px;overflow-y:auto}
+.chip{font-family:var(--mono);font-size:13px;font-weight:600;background:var(--bg3);
+  border:1px solid var(--border2);color:var(--text);padding:4px 10px;border-radius:20px}
+.chip-none{font-size:13px;color:var(--muted);font-style:italic}
+
+@media(max-width:900px){
+  .main{flex-direction:column}
+  .side{flex:none;flex-direction:row;flex-wrap:wrap}
+  .panel{flex:1 1 260px}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="topbar">
+    <div class="title">Genuine vs IM <span>— Participant Probability Map</span></div>
+    <div class="ctrls">
+      <div class="cg">
+        <span class="cl">Cohort</span>
+        <div class="bg" id="cohort-toggle">
+          <button class="on" data-c="ext">Wrist Extension</button>
+          <button data-c="flex">Wrist Flexion</button>
+        </div>
+      </div>
+      <div class="cg">
+        <span class="cl">Threshold</span>
+        <div class="bg" id="thr-toggle">
+          <button class="on" data-mode="fixed">0.5 Fixed</button>
+          <button data-mode="youden">Youden J</button>
+        </div>
+      </div>
+      <div class="thr-readout">P(IM) ≥ <b id="thr-val">0.500</b></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="chart-card">
+      <div id="chart"></div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <div class="panel-t">Confusion Matrix</div>
+        <div class="cm" id="cm-grid"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-t">Classification Metrics</div>
+        <div class="met-grid" id="met-grid"></div>
+      </div>
+
+      <div class="panel">
+        <div class="flag-sec">
+          <button class="flag-hd" id="fp-toggle" type="button">
+            <span class="fl">False Positives</span><span class="flag-n" id="fp-n"></span>
+          </button>
+          <div class="chips" id="fp-list"></div>
+        </div>
+        <div class="flag-sec" style="margin-top:14px">
+          <button class="flag-hd" id="fn-toggle" type="button">
+            <span class="fl fn-lbl">False Negatives</span><span class="flag-n" id="fn-n"></span>
+          </button>
+          <div class="chips" id="fn-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   DATA — Wrist Extension & Wrist Flexion validation cohorts
+═══════════════════════════════════════════════════════════ */
+function parseData(text){
+  var lines = text.split(/\r?\n/);
+  var out = [];
+  lines.forEach(function(line){
+    var t = line.trim();
+    if(!t) return;
+    var tok = t.split(/[\t,]+|\s{1,}/).filter(function(s){return s.length;});
+    if(tok.length < 3) return;
+    var pG = parseFloat(tok[1]), pI = parseFloat(tok[2]);
+    if(isNaN(pG) || isNaN(pI)) return;
+    out.push({id: tok[0], pG: pG, pI: pI});
+  });
+  return out;
+}
+
+var COHORTS = {
+  ext: parseData(
+"P1\t0.6320\t0.7722\n"+
+"P2\t0.5923\t0.3202\n"+
+"P3\t0.9959\t0.9869\n"+
+"P4\t0.1615\t0.9969\n"+
+"P5\t0.0993\t0.8800\n"+
+"P6\t0.4155\t1.0000\n"+
+"P7\t0.6724\t0.6703\n"+
+"P8\t0.5064\t0.9907\n"+
+"P9\t0.5127\t0.7624\n"+
+"P10\t0.4456\t0.9989\n"+
+"P11\t0.2165\t0.2508\n"+
+"P12\t0.9532\t0.8533\n"+
+"P13\t0.8726\t0.6479\n"+
+"P14\t0.8108\t0.9999\n"+
+"P15\t0.6388\t0.6141\n"+
+"P16\t0.7314\t0.7378\n"+
+"P17\t0.2139\t0.5673\n"+
+"P18\t0.2394\t0.8914\n"+
+"P19\t0.0834\t0.8850\n"+
+"P20\t0.7001\t0.9716\n"+
+"P21\t0.6431\t0.9814\n"+
+"P22\t0.4334\t0.6753\n"+
+"P23\t0.4045\t0.9992\n"+
+"P24\t0.7144\t0.9999\n"+
+"P25\t0.3996\t1.0000\n"+
+"P26\t0.3207\t1.0000\n"+
+"P27\t0.4523\t1.0000\n"+
+"P28\t0.9994\t0.9999\n"+
+"P29\t0.9974\t0.9983\n"+
+"P30\t0.1498\t0.2672"
+  ),
+  flex: parseData(
+"P1\t0.6927\t0.4155\n"+
+"P2\t0.6450\t0.2296\n"+
+"P3\t0.5095\t0.8518\n"+
+"P4\t0.1801\t0.8159\n"+
+"P5\t0.0611\t0.7001\n"+
+"P6\t0.8011\t1.0000\n"+
+"P7\t0.4439\t0.4445\n"+
+"P8\t0.3511\t0.6340\n"+
+"P9\t0.7275\t0.7407\n"+
+"P10\t0.6535\t1.0000\n"+
+"P11\t0.6496\t0.3607\n"+
+"P12\t0.9277\t0.9999\n"+
+"P13\t0.4827\t0.8547\n"+
+"P14\t0.9873\t0.9884\n"+
+"P15\t0.6449\t0.8887\n"+
+"P16\t0.6973\t0.9883\n"+
+"P17\t0.2365\t0.5515\n"+
+"P18\t0.2350\t0.6425\n"+
+"P19\t0.7145\t0.9406\n"+
+"P20\t0.9905\t0.9030\n"+
+"P21\t0.2363\t0.8706\n"+
+"P22\t0.1881\t0.3976\n"+
+"P23\t0.4106\t0.9974\n"+
+"P24\t0.6772\t1.0000\n"+
+"P25\t0.4009\t0.9627\n"+
+"P26\t0.2745\t0.9998\n"+
+"P27\t0.3894\t1.0000\n"+
+"P28\t0.9955\t0.9984\n"+
+"P29\t0.9980\t1.0000\n"+
+"P30\t0.0836\t0.6222"
+  )
+};
+
+var activeCohort = 'ext';
+var thrMode = 'fixed';
+var highlightFP = false;
+var highlightFN = false;
+
+/* ════════════════════════════════════════════════════════════
+   STATS
+═══════════════════════════════════════════════════════════ */
+function metricsAt(data, thr){
+  var tp=0,fp=0,tn=0,fn=0;
+  data.forEach(function(d){
+    if(d.pG>=thr) fp++; else tn++;
+    if(d.pI>=thr) tp++; else fn++;
+  });
+  return {tp:tp,fp:fp,tn:tn,fn:fn,
+    sens:tp/(tp+fn||1), spec:tn/(tn+fp||1),
+    ppv:tp/(tp+fp||1), npv:tn/(tn+fn||1),
+    acc:(tp+tn)/(2*data.length||1)};
+}
+function youdenThr(data){
+  var pAll = data.map(function(d){return d.pG;}).concat(data.map(function(d){return d.pI;}));
+  var cands = pAll.slice().sort(function(a,b){return a-b;});
+  var bestJ=-Infinity, thr=0.5;
+  cands.forEach(function(t){
+    var m = metricsAt(data,t);
+    var J = m.sens+m.spec-1;
+    if(J>bestJ){ bestJ=J; thr=t; }
+  });
+  return thr;
+}
+
+/* ════════════════════════════════════════════════════════════
+   TOGGLES
+═══════════════════════════════════════════════════════════ */
+document.getElementById('cohort-toggle').addEventListener('click', function(e){
+  var btn = e.target.closest('button'); if(!btn) return;
+  activeCohort = btn.getAttribute('data-c');
+  document.querySelectorAll('#cohort-toggle button').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  renderAll();
+});
+document.getElementById('thr-toggle').addEventListener('click', function(e){
+  var btn = e.target.closest('button'); if(!btn) return;
+  thrMode = btn.getAttribute('data-mode');
+  document.querySelectorAll('#thr-toggle button').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  renderAll();
+});
+document.getElementById('fp-toggle').addEventListener('click', function(){
+  highlightFP = !highlightFP;
+  document.getElementById('fp-toggle').classList.toggle('on', highlightFP);
+  renderAll();
+});
+document.getElementById('fn-toggle').addEventListener('click', function(){
+  highlightFN = !highlightFN;
+  document.getElementById('fn-toggle').classList.toggle('on', highlightFN);
+  renderAll();
+});
+window.addEventListener('resize', function(){
+  Plotly.Plots.resize('chart');
+});
+
+/* ════════════════════════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════════════════════ */
+function renderAll(){
+  var data = COHORTS[activeCohort];
+  var thr = thrMode==='fixed' ? 0.5 : youdenThr(data);
+  document.getElementById('thr-val').textContent = thr.toFixed(4);
+
+  var m = metricsAt(data, thr);
+
+  /* ── Chart ─────────────────────────────────────────────── */
+  var anyHighlight = highlightFP || highlightFN;
+  var HAZY = 0.10, LINE_HAZY = 0.06, LINE_NORMAL = 0.35;
+
+  var xG=[], yG=[], idG=[], opG=[];
+  var xI=[], yI=[], idI=[], opI=[];
+  var lineX=[], lineY=[];
+  var fpX=[], fpY=[], fpId=[];
+  var fnX=[], fnY=[], fnId=[];
+  data.forEach(function(d){
+    var isFP = d.pG>=thr, isFN = d.pI<thr;
+    xG.push(0); yG.push(d.pG); idG.push(d.id);
+    xI.push(1); yI.push(d.pI); idI.push(d.id);
+    lineX.push(0,1,null); lineY.push(d.pG,d.pI,null);
+    if(isFP){ fpX.push(0); fpY.push(d.pG); fpId.push(d.id); }
+    if(isFN){ fnX.push(1); fnY.push(d.pI); fnId.push(d.id); }
+    // Opacity: with no highlight toggled, everything is fully visible.
+    // With a highlight active, only the matching flagged trials stay
+    // full-opacity — every other trial (correct classifications, and the
+    // non-toggled error type) fades to "hazy" so the flagged ones pop out.
+    opG.push(!anyHighlight ? 1 : (highlightFP && isFP ? 1 : HAZY));
+    opI.push(!anyHighlight ? 1 : (highlightFN && isFN ? 1 : HAZY));
+  });
+
+  var traces = [
+    {x:lineX, y:lineY, type:'scatter', mode:'lines',
+     line:{color:'rgba(100,116,139,'+(anyHighlight?LINE_HAZY:LINE_NORMAL)+')', width:1.6},
+     hoverinfo:'skip', showlegend:false},
+    {x:xG, y:yG, type:'scatter', mode:'markers', name:'Genuine trial',
+     marker:{size:15, color:'#188a4e', opacity:opG, line:{color:'#0b3d22', width:1.6}},
+     text:idG, hovertemplate:'%{text}<br>P(IM)=%{y:.3f}<extra>Genuine trial</extra>'},
+    {x:xI, y:yI, type:'scatter', mode:'markers', name:'IM trial',
+     marker:{size:15, color:'#d92d20', opacity:opI, line:{color:'#7a160f', width:1.6}},
+     text:idI, hovertemplate:'%{text}<br>P(IM)=%{y:.3f}<extra>IM trial</extra>'}
+  ];
+  if(fpX.length){
+    traces.push({x:fpX, y:fpY, type:'scatter', mode:'markers', name:'False Positive', showlegend:false,
+      opacity: !anyHighlight ? 1 : (highlightFP ? 1 : HAZY),
+      marker:{size:24, color:'rgba(0,0,0,0)', line:{color:'#e8a900', width:3.4}, symbol:'circle-open'},
+      text:fpId, hovertemplate:'%{text}<br>False Positive<extra></extra>'});
+  }
+  if(fnX.length){
+    traces.push({x:fnX, y:fnY, type:'scatter', mode:'markers', name:'False Negative', showlegend:false,
+      opacity: !anyHighlight ? 1 : (highlightFN ? 1 : HAZY),
+      marker:{size:24, color:'rgba(0,0,0,0)', line:{color:'#e8a900', width:3.4}, symbol:'diamond-open'},
+      text:fnId, hovertemplate:'%{text}<br>False Negative<extra></extra>'});
+  }
+
+  Plotly.react('chart', traces, {
+    paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+    font:{color:'#10182b', family:'IBM Plex Sans', size:15},
+    xaxis:{tickmode:'array', tickvals:[0,1], ticktext:['Genuine trials','IM trials'],
+      range:[-0.4,1.4], color:'#64748b', gridcolor:'#eef2f7', zeroline:false,
+      tickfont:{size:17, color:'#10182b'}},
+    yaxis:{title:{text:'Predicted P(IM)', font:{size:16}}, range:[-0.02,1.02],
+      color:'#64748b', gridcolor:'#eef2f7', tickfont:{size:15}},
+    shapes:[
+      {type:'rect', xref:'paper', x0:0, x1:1, yref:'y', y0:0, y1:thr,
+       fillcolor:'rgba(24,138,78,.07)', line:{width:0}, layer:'below'},
+      {type:'rect', xref:'paper', x0:0, x1:1, yref:'y', y0:thr, y1:1,
+       fillcolor:'rgba(217,45,32,.06)', line:{width:0}, layer:'below'},
+      {type:'line', xref:'paper', x0:0, x1:1, y0:thr, y1:thr,
+       line:{color:'#94a3b8', width:1.8, dash:'dash'}}
+    ],
+    annotations:[
+      {x:1, xref:'paper', y:thr, text:'thr = '+thr.toFixed(3), showarrow:false,
+       font:{color:'#64748b', size:13.5}, xanchor:'right', yanchor:'bottom', xshift:-2, yshift:4}
+    ],
+    margin:{t:40, r:24, b:54, l:68},
+    legend:{font:{size:15}, orientation:'h', x:0.5, y:1.1, xanchor:'center'},
+    hoverlabel:{font:{size:14}},
+    autosize:true
+  }, {responsive:true, displayModeBar:false});
+
+  /* ── Confusion matrix ─────────────────────────────────────── */
+  document.getElementById('cm-grid').innerHTML =
+    '<div class="cm-lbl"></div><div class="cm-lbl">Pred<br>Genuine</div><div class="cm-lbl">Pred<br>IM</div>'+
+    '<div class="cm-lbl" style="writing-mode:vertical-rl;transform:rotate(180deg)">True G</div>'+
+    '<div class="cm-cell tn">'+m.tn+'</div><div class="cm-cell fp">'+m.fp+'</div>'+
+    '<div class="cm-lbl" style="writing-mode:vertical-rl;transform:rotate(180deg)">True IM</div>'+
+    '<div class="cm-cell fn">'+m.fn+'</div><div class="cm-cell tp">'+m.tp+'</div>';
+
+  /* ── Metric tiles ─────────────────────────────────────────── */
+  function metTile(lbl,val,cls){
+    return '<div class="met'+(cls?' '+cls:'')+'"><div class="met-l">'+lbl+'</div><div class="met-v">'+val+'</div></div>';
+  }
+  document.getElementById('met-grid').innerHTML =
+    metTile('Sensitivity', m.sens.toFixed(3)) +
+    metTile('Specificity', m.spec.toFixed(3)) +
+    metTile('PPV', m.ppv.toFixed(3)) +
+    metTile('NPV', m.npv.toFixed(3)) +
+    metTile('Accuracy', m.acc.toFixed(3), 'full');
+
+  /* ── Flagged chips ─────────────────────────────────────────── */
+  document.getElementById('fp-n').textContent = 'n = '+fpId.length;
+  document.getElementById('fn-n').textContent = 'n = '+fnId.length;
+  document.getElementById('fp-list').innerHTML = fpId.length
+    ? fpId.map(function(id){return '<span class="chip">'+id+'</span>';}).join('')
+    : '<span class="chip-none">None</span>';
+  document.getElementById('fn-list').innerHTML = fnId.length
+    ? fnId.map(function(id){return '<span class="chip">'+id+'</span>';}).join('')
+    : '<span class="chip-none">None</span>';
+}
+
+renderAll();
+</script>
+</body>
+</html>
