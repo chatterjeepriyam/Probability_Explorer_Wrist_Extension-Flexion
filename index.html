@@ -247,6 +247,18 @@ var thrMode = 'fixed';
 var highlightFP = false;
 var highlightFN = false;
 
+// Chart pixel size is measured ONLY here — once on load (after layout has
+// settled) and on real window resizes — and then cached. renderAll() reuses
+// this cached value on every toggle click instead of re-measuring, so a
+// toggle (cohort, threshold, FP/FN highlight) can never change the chart's
+// scale: sizing and data-rendering are fully decoupled by construction.
+var chartSize = {w:0, h:0};
+function measureChartSize(){
+  var el = document.getElementById('chart');
+  var w = el.clientWidth, h = el.clientHeight;
+  if(w>0 && h>0){ chartSize = {w:w, h:h}; }
+}
+
 /* ════════════════════════════════════════════════════════════
    STATS
 ═══════════════════════════════════════════════════════════ */
@@ -304,8 +316,15 @@ document.getElementById('fn-toggle').addEventListener('click', function(){
   document.getElementById('fn-toggle').classList.toggle('on', highlightFN);
   renderAll();
 });
+var resizePending = false;
 window.addEventListener('resize', function(){
-  renderAll();
+  if(resizePending) return;
+  resizePending = true;
+  requestAnimationFrame(function(){
+    resizePending = false;
+    measureChartSize();
+    renderAll();
+  });
 });
 
 /* ════════════════════════════════════════════════════════════
@@ -366,17 +385,12 @@ function renderAll(){
       text:fnId, hovertemplate:'%{text}<br>False Negative<extra></extra>'});
   }
 
-  // Measure the chart container fresh on every render and pass explicit
-  // pixel dimensions to Plotly. Letting Plotly auto-detect size from the
-  // container on every Plotly.react() call (autosize:true with no
-  // explicit width/height) is what produced the scaling bug: after a
-  // toggle click, Plotly sometimes re-used a stale internal size estimate
-  // instead of re-measuring the flexbox-driven container, so the plot
-  // rendered at the wrong scale and the bottom of the chart ran off
-  // screen. Reading clientWidth/clientHeight here guarantees the plot is
-  // always sized to match the container exactly as it exists right now.
-  var chartEl = document.getElementById('chart');
-  var chartW = chartEl.clientWidth, chartH = chartEl.clientHeight;
+  // Use the cached size from measureChartSize() — NOT a fresh read here —
+  // so toggling cohort/threshold/highlight can never alter the chart's
+  // scale. If somehow nothing has been measured yet (shouldn't happen
+  // given the init sequence below), fall back to a one-off measurement.
+  if(chartSize.w===0 || chartSize.h===0) measureChartSize();
+  var chartW = chartSize.w, chartH = chartSize.h;
 
   Plotly.react('chart', traces, {
     width: chartW, height: chartH, autosize: false,
@@ -413,14 +427,13 @@ function renderAll(){
     '<div class="cm-cell fn">'+m.fn+'</div><div class="cm-cell tp">'+m.tp+'</div>';
 
   /* ── Metric tiles ─────────────────────────────────────────── */
-  function metTile(lbl,val,cls){
-    return '<div class="met'+(cls?' '+cls:'')+'"><div class="met-l">'+lbl+'</div><div class="met-v">'+val+'</div></div>';
+  function metTile(lbl,val,cls,color){
+    var style = color ? ' style="color:'+color+'"' : '';
+    return '<div class="met'+(cls?' '+cls:'')+'"><div class="met-l">'+lbl+'</div><div class="met-v"'+style+'>'+val+'</div></div>';
   }
   document.getElementById('met-grid').innerHTML =
-    metTile('Sensitivity', m.sens.toFixed(3)) +
-    metTile('Specificity', m.spec.toFixed(3)) +
-    metTile('PPV', m.ppv.toFixed(3)) +
-    metTile('NPV', m.npv.toFixed(3)) +
+    metTile('Sensitivity', m.sens.toFixed(3), '', '#d92d20') +
+    metTile('Specificity', m.spec.toFixed(3), '', '#188a4e') +
     metTile('Accuracy', m.acc.toFixed(3), 'full');
 
   /* ── Flagged chips ─────────────────────────────────────────── */
@@ -434,7 +447,13 @@ function renderAll(){
     : '<span class="chip-none">None</span>';
 }
 
-renderAll();
+// Defer the first measurement to the next animation frame so it reads the
+// layout *after* the browser has fully settled (fonts swapped in, flexbox
+// resolved) rather than at the instant this script tag executes.
+requestAnimationFrame(function(){
+  measureChartSize();
+  renderAll();
+});
 </script>
 </body>
 </html>
